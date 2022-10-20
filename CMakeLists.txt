@@ -75,39 +75,21 @@ set(TR_NAME ${PROJECT_NAME})
 
 
 # these should be the only five lines you need to change
-set(TR_VERSION_MAJOR "4")
+set(TR_VERSION_MAJOR "3")
 set(TR_VERSION_MINOR "0")
 set(TR_VERSION_PATCH "0")
-set(TR_VERSION_BETA_NUMBER "1") # empty string for not beta
-set(TR_VERSION_DEV TRUE)
+set(TR_VERSION_BETA_NUMBER "") # empty string for not beta
+set(TR_VERSION_DEV FALSE)
 
 # derived from above: release type
-if (TR_VERSION_DEV)
-    set(TR_NIGHTLY_RELEASE 1)
-elseif (NOT "${TR_VERSION_BETA_NUMBER}" STREQUAL "")
-    set(TR_BETA_RELEASE 1)
-else()
-    set(TR_STABLE_RELEASE 1)
-endif()
+set(TR_STABLE_RELEASE 1)
 
 # derived from above: semver version string. https://semver.org/
 # '4.0.0-beta.1'
 # '4.0.0-beta.1.dev' (a dev release between beta 1 and 2)
 # '4.0.0-beta.2'
 # '4.0.0'
-set(TR_SEMVER "${TR_VERSION_MAJOR}.${TR_VERSION_MINOR}.${TR_VERSION_PATCH}")
-if (TR_VERSION_DEV OR NOT "${TR_VERSION_BETA_NUMBER}" STREQUAL "")
-    string(APPEND TR_SEMVER "-")
-    if (NOT "${TR_VERSION_BETA_NUMBER}" STREQUAL "")
-        string(APPEND TR_SEMVER "beta.${TR_VERSION_BETA_NUMBER}")
-    endif()
-    if (TR_VERSION_DEV AND NOT "${TR_VERSION_BETA_NUMBER}" STREQUAL "")
-        string(APPEND TR_SEMVER ".")
-    endif()
-    if (TR_VERSION_DEV)
-        string(APPEND TR_SEMVER "dev")
-    endif()
-endif()
+set(TR_SEMVER "3.00")
 set(TR_USER_AGENT_PREFIX "${TR_SEMVER}")
 
 # derived from above: peer-id prefix. https://www.bittorrent.org/beps/bep_0020.html

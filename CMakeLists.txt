@@ -78,7 +78,7 @@ set(TR_NAME ${PROJECT_NAME})
 set(TR_VERSION_MAJOR "3")
 set(TR_VERSION_MINOR "0")
 set(TR_VERSION_PATCH "0")
-set(TR_VERSION_BETA_NUMBER "0") # empty string for not beta
+set(TR_VERSION_BETA_NUMBER "") # empty string for not beta
 set(TR_VERSION_DEV FALSE)
 
 # derived from above: release type

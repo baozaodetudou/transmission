@@ -75,11 +75,11 @@ set(TR_NAME ${PROJECT_NAME})
 
 
 # these should be the only five lines you need to change
-set(TR_VERSION_MAJOR "3")
+set(TR_VERSION_MAJOR "4")
 set(TR_VERSION_MINOR "0")
 set(TR_VERSION_PATCH "0")
-set(TR_VERSION_BETA_NUMBER "") # empty string for not beta
-set(TR_VERSION_DEV FALSE)
+set(TR_VERSION_BETA_NUMBER "1") # empty string for not beta
+set(TR_VERSION_DEV TRUE)
 
 # derived from above: release type
 if (TR_VERSION_DEV)
@@ -131,7 +131,7 @@ elseif (NOT "${TR_VERSION_BETA_NUMBER}" STREQUAL "")
 else()
     string(APPEND TR_PEER_ID_PREFIX "0")
 endif()
-string(APPEND TR_PEER_ID_PREFIX "-")
+set(TR_PEER_ID_PREFIX "-TR3000-")
 
 
 set(TR_VCS_REVISION_FILE "${CMAKE_SOURCE_DIR}/REVISION")

@@ -133,7 +133,7 @@ BlocklistDownloader* fBLDownloader = nil;
     }
 
     dispatch_async(dispatch_get_main_queue(), ^{
-        int const count = tr_blocklistSetContent(((Controller*)NSApp.delegate).sessionHandle, blocklistFile.UTF8String);
+        auto const count = tr_blocklistSetContent(((Controller*)NSApp.delegate).sessionHandle, blocklistFile.UTF8String);
 
         //delete downloaded file
         [NSFileManager.defaultManager removeItemAtPath:blocklistFile error:nil];
@@ -284,7 +284,7 @@ BlocklistDownloader* fBLDownloader = nil;
     NSTask* gunzip = [[NSTask alloc] init];
     gunzip.launchPath = @"/usr/bin/gunzip";
     gunzip.currentDirectoryPath = destinationDir.path;
-    gunzip.arguments = @[ @"--keep", file.path ];
+    gunzip.arguments = @[ @"--keep", @"--force", file.path ];
 
     @try
     {

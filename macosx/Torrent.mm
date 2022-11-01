@@ -101,7 +101,7 @@ void renameCallback(tr_torrent* torrent, char const* oldPathCharString, char con
     }
 }
 
-bool trashDataFile(char const* filename, tr_error** error)
+bool trashDataFile(char const* filename, void* /*user_data*/, tr_error** error)
 {
     if (filename == NULL)
     {
@@ -213,7 +213,7 @@ bool trashDataFile(char const* filename, tr_error** error)
     //allow the file to be indexed by Time Machine
     [self setTimeMachineExclude:NO];
 
-    tr_torrentRemove(self.fHandle, trashFiles, trashDataFile);
+    tr_torrentRemove(self.fHandle, trashFiles, trashDataFile, nullptr);
 }
 
 - (void)changeDownloadFolderBeforeUsing:(NSString*)folder determinationType:(TorrentDeterminationType)determinationType
@@ -931,12 +931,12 @@ bool trashDataFile(char const* filename, tr_error** error)
 
 - (NSArray<NSDictionary*>*)peers
 {
-    int totalPeers;
+    size_t totalPeers;
     tr_peer_stat* peers = tr_torrentPeers(self.fHandle, &totalPeers);
 
     NSMutableArray* peerDicts = [NSMutableArray arrayWithCapacity:totalPeers];
 
-    for (int i = 0; i < totalPeers; i++)
+    for (size_t i = 0; i < totalPeers; i++)
     {
         tr_peer_stat* peer = &peers[i];
         NSMutableDictionary* dict = [NSMutableDictionary dictionaryWithCapacity:12];

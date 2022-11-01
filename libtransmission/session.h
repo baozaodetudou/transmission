@@ -26,6 +26,7 @@
 #include "transmission.h"
 
 #include "announce-list.h"
+#include "announcer.h"
 #include "bandwidth.h"
 #include "bitfield.h"
 #include "cache.h"
@@ -52,16 +53,14 @@ enum tr_auto_switch_state_t
 tr_peer_id_t tr_peerIdInit();
 
 struct event_base;
-struct evdns_base;
 
-class tr_rpc_server;
-class tr_web;
 class tr_lpd;
 class tr_port_forwarding;
+class tr_rpc_server;
+class tr_web;
 struct BlocklistFile;
 struct struct_utp_context;
 struct tr_announcer;
-struct tr_announcer_udp;
 
 namespace libtransmission
 {
@@ -80,7 +79,7 @@ class SessionTest;
 struct tr_turtle_info
 {
     /* TR_UP and TR_DOWN speed limits */
-    std::array<unsigned int, 2> speedLimit_Bps = {};
+    std::array<tr_bytes_per_second_t, 2> speedLimit_Bps = {};
 
     /* is turtle mode on right now? */
     bool isEnabled = false;
@@ -88,10 +87,12 @@ struct tr_turtle_info
     /* does turtle mode turn itself on and off at given times? */
     bool isClockEnabled = false;
 
-    /* when clock mode is on, minutes after midnight to turn on turtle mode */
+    /* when clock mode is on, minutes after midnight to turn on turtle mode.
+     * Valid range: 0..<1440 */
     int beginMinute = 0;
 
-    /* when clock mode is on, minutes after midnight to turn off turtle mode */
+    /* when clock mode is on, minutes after midnight to turn off turtle mode.
+     * Valid range: 0..<1440 */
     int endMinute = 0;
 
     /* only use clock mode on these days of the week */
@@ -139,6 +140,40 @@ private:
         tr_address addr_;
         struct event* ev_ = nullptr;
         tr_socket_t socket_ = TR_BAD_SOCKET;
+    };
+
+    class AnnouncerUdpMediator final : public tr_announcer_udp::Mediator
+    {
+    public:
+        explicit AnnouncerUdpMediator(tr_session& session)
+            : session_{ session }
+        {
+        }
+
+        ~AnnouncerUdpMediator() noexcept override = default;
+
+        void sendto(void const* buf, size_t buflen, sockaddr const* addr, socklen_t addrlen) override
+        {
+            session_.udp_core_->sendto(buf, buflen, addr, addrlen);
+        }
+
+        [[nodiscard]] std::optional<tr_address> announceIP() const override
+        {
+            if (!session_.useAnnounceIP())
+            {
+                return {};
+            }
+
+            return tr_address::fromString(session_.announceIP());
+        }
+
+        [[nodiscard]] libtransmission::Dns& dns() override
+        {
+            return *session_.dns_.get();
+        }
+
+    private:
+        tr_session& session_;
     };
 
     class PortForwardingMediator final : public tr_port_forwarding::Mediator
@@ -274,11 +309,6 @@ public:
     [[nodiscard]] event_base* eventBase() noexcept
     {
         return event_base_.get();
-    }
-
-    [[nodiscard]] evdns_base* evdnsBase() noexcept
-    {
-        return evdns_base_.get();
     }
 
     [[nodiscard]] libtransmission::TimerMaker& timerMaker() noexcept
@@ -476,7 +506,7 @@ public:
 
     // announce ip
 
-    [[nodiscard]] constexpr auto const& announceIP() const noexcept
+    [[nodiscard]] constexpr std::string const& announceIP() const noexcept
     {
         return announce_ip_;
     }
@@ -486,7 +516,7 @@ public:
         announce_ip_ = ip;
     }
 
-    [[nodiscard]] constexpr auto useAnnounceIP() const noexcept
+    [[nodiscard]] constexpr bool useAnnounceIP() const noexcept
     {
         return announce_ip_enabled_;
     }
@@ -761,7 +791,7 @@ public:
         return top_bandwidth_.getPieceSpeedBytesPerSecond(0, dir);
     }
 
-    [[nodiscard]] std::optional<unsigned int> activeSpeedLimitBps(tr_direction dir) const noexcept;
+    [[nodiscard]] std::optional<tr_bytes_per_second_t> activeSpeedLimitBps(tr_direction dir) const noexcept;
 
     [[nodiscard]] constexpr auto isIncompleteFileNamingEnabled() const noexcept
     {
@@ -887,7 +917,7 @@ private:
     friend void tr_sessionSetPexEnabled(tr_session* session, bool enabled);
     friend void tr_sessionSetPortForwardingEnabled(tr_session* session, bool enabled);
     friend void tr_sessionSetQueueEnabled(tr_session* session, tr_direction dir, bool do_limit_simultaneous_seed_torrents);
-    friend void tr_sessionSetQueueSize(tr_session* session, tr_direction dir, int max_simultaneous_seed_torrents);
+    friend void tr_sessionSetQueueSize(tr_session* session, tr_direction dir, size_t max_simultaneous_seed_torrents);
     friend void tr_sessionSetQueueStalledEnabled(tr_session* session, bool is_enabled);
     friend void tr_sessionSetQueueStalledMinutes(tr_session* session, int minutes);
     friend void tr_sessionSetRPCCallback(tr_session* session, tr_rpc_func func, void* user_data);
@@ -898,7 +928,7 @@ private:
     friend void tr_sessionSetRPCUsername(tr_session* session, char const* username);
     friend void tr_sessionSetRatioLimit(tr_session* session, double desired_ratio);
     friend void tr_sessionSetRatioLimited(tr_session* session, bool is_limited);
-    friend void tr_sessionSetSpeedLimit_Bps(tr_session* session, tr_direction dir, unsigned int bytes_per_second);
+    friend void tr_sessionSetSpeedLimit_Bps(tr_session* session, tr_direction dir, tr_bytes_per_second_t bytes_per_second);
     friend void tr_sessionSetUTPEnabled(tr_session* session, bool enabled);
 
     /// constexpr fields
@@ -920,8 +950,11 @@ private:
     std::string const torrent_dir_;
 
     std::unique_ptr<event_base, void (*)(event_base*)> const event_base_;
-    std::unique_ptr<evdns_base, void (*)(evdns_base*)> const evdns_base_;
+
+    // depends on: event_base_
     std::unique_ptr<libtransmission::TimerMaker> const timer_maker_;
+
+    // depends on: event_base_
     std::unique_ptr<libtransmission::Dns> const dns_;
 
     /// trivial type fields
@@ -948,13 +981,13 @@ private:
 
     float desired_ratio_ = 2.0F;
 
-    std::array<unsigned int, 2> speed_limit_Bps_ = { 0U, 0U };
+    std::array<tr_bytes_per_second_t, 2> speed_limit_Bps_ = { 0U, 0U };
     std::array<bool, 2> speed_limit_enabled_ = { false, false };
 
     std::array<bool, 2> queue_enabled_ = { false, false };
-    std::array<int, 2> queue_size_ = { 0, 0 };
+    std::array<size_t, 2> queue_size_ = { 0, 0 };
 
-    int umask_ = 022;
+    uint32_t umask_ = 022;
 
     // One of <netinet/ip.h>'s IPTOS_ values.
     // See tr_netTos*() in libtransmission/net.h for more info
@@ -1070,10 +1103,16 @@ private:
 
 public:
     struct tr_announcer* announcer = nullptr;
-    struct tr_announcer_udp* announcer_udp = nullptr;
 
     // monitors the "global pool" speeds
     tr_bandwidth top_bandwidth_;
+
+private:
+    // depends-on: dns_, udp_core_
+    AnnouncerUdpMediator announcer_udp_mediator_{ *this };
+
+public:
+    std::unique_ptr<tr_announcer_udp> announcer_udp_ = tr_announcer_udp::create(announcer_udp_mediator_);
 
 private:
     std::vector<std::pair<tr_interned_string, std::unique_ptr<tr_bandwidth>>> bandwidth_groups_;
@@ -1097,10 +1136,6 @@ private:
 public:
     struct struct_utp_context* utp_context = nullptr;
     std::unique_ptr<libtransmission::Timer> utp_timer;
-
-    // These UDP announcer quirks are tightly hooked with session
-    bool tau_handle_message(uint8_t const* msg, size_t msglen) const;
-    void tau_sendto(struct evutil_addrinfo* ai, tr_port port, void const* buf, size_t buflen) const;
 };
 
 constexpr bool tr_isPriority(tr_priority_t p)

@@ -203,23 +203,23 @@ void tr_announcerParseHttpAnnounceResponse(tr_announce_response& response, std::
         {
             if (auto const key = currentKey(); key == "interval")
             {
-                response_.interval = value;
+                response_.interval = static_cast<int>(value);
             }
             else if (key == "min interval"sv)
             {
-                response_.min_interval = value;
+                response_.min_interval = static_cast<int>(value);
             }
             else if (key == "complete"sv)
             {
-                response_.seeders = value;
+                response_.seeders = static_cast<int>(value);
             }
             else if (key == "incomplete"sv)
             {
-                response_.leechers = value;
+                response_.leechers = static_cast<int>(value);
             }
             else if (key == "downloaded"sv)
             {
-                response_.downloads = value;
+                response_.downloads = static_cast<int>(value);
             }
             else if (key == "port"sv)
             {
@@ -249,11 +249,11 @@ void tr_announcerParseHttpAnnounceResponse(tr_announce_response& response, std::
             }
             else if (key == "peers"sv)
             {
-                response_.pex = tr_peerMgrCompactToPex(std::data(value), std::size(value), nullptr, 0);
+                response_.pex = tr_pex::fromCompact4(std::data(value), std::size(value), nullptr, 0);
             }
             else if (key == "peers6"sv)
             {
-                response_.pex6 = tr_peerMgrCompact6ToPex(std::data(value), std::size(value), nullptr, 0);
+                response_.pex6 = tr_pex::fromCompact6(std::data(value), std::size(value), nullptr, 0);
             }
             else if (key == "ip")
             {
@@ -268,7 +268,7 @@ void tr_announcerParseHttpAnnounceResponse(tr_announce_response& response, std::
             }
             else if (key == "external ip"sv && std::size(value) == 4)
             {
-                auto const [addr, out] = tr_address::fromCompact4(reinterpret_cast<uint8_t const*>(std::data(value)));
+                auto const [addr, out] = tr_address::fromCompact4(reinterpret_cast<std::byte const*>(std::data(value)));
                 response_.external_ip = addr;
             }
             else
@@ -549,23 +549,23 @@ void tr_announcerParseHttpScrapeResponse(tr_scrape_response& response, std::stri
         {
             if (auto const key = currentKey(); row_ && key == "complete"sv)
             {
-                response_.rows[*row_].seeders = value;
+                response_.rows[*row_].seeders = static_cast<int>(value);
             }
             else if (row_ && key == "downloaded"sv)
             {
-                response_.rows[*row_].downloads = value;
+                response_.rows[*row_].downloads = static_cast<int>(value);
             }
             else if (row_ && key == "incomplete"sv)
             {
-                response_.rows[*row_].leechers = value;
+                response_.rows[*row_].leechers = static_cast<int>(value);
             }
             else if (row_ && key == "downloaders"sv)
             {
-                response_.rows[*row_].downloaders = value;
+                response_.rows[*row_].downloaders = static_cast<int>(value);
             }
             else if (key == "min_request_interval"sv)
             {
-                response_.min_request_interval = value;
+                response_.min_request_interval = static_cast<int>(value);
             }
             else
             {

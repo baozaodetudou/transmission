@@ -2,8 +2,10 @@
 // It may be used under the MIT (SPDX: MIT) license.
 // License text can be found in the licenses/ folder.
 
+#include <clocale>
 #include <cstdio>
 #include <string>
+#include <tuple>
 
 #include <glibmm.h>
 #include <glibmm/i18n.h>
@@ -41,7 +43,7 @@ Glib::OptionEntry create_option_entry(Glib::ustring const& long_name, gchar shor
 int main(int argc, char** argv)
 {
     /* init i18n */
-    setlocale(LC_ALL, "");
+    std::ignore = std::setlocale(LC_ALL, "");
     bindtextdomain(AppTranslationDomainName, TRANSMISSIONLOCALEDIR);
     bind_textdomain_codeset(AppTranslationDomainName, "UTF-8");
     textdomain(AppTranslationDomainName);
@@ -55,7 +57,7 @@ int main(int argc, char** argv)
     Gio::File::create_for_path(".");
     Glib::wrap_register(
         g_type_from_name("GLocalFile"),
-        [](GObject* object) -> Glib::ObjectBase* { return new Gio::File((GFile*)object); });
+        [](GObject* object) -> Glib::ObjectBase* { return new Gio::File(G_FILE(object)); });
     g_type_ensure(Gio::File::get_type());
 
     /* default settings */
@@ -93,7 +95,7 @@ int main(int argc, char** argv)
         fmt::print(
             stderr,
             _("Run '{program} --help' to see a full list of available command line options.\n"),
-            fmt::arg("program", argv[0]));
+            fmt::arg("program", *argv));
         return 1;
     }
 

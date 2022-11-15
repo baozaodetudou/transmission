@@ -40,10 +40,10 @@ struct tr_torrent;
 struct tr_torrent_announcer;
 
 /**
-***  Package-visible ctor API
+***  Package-visible
 **/
 
-void tr_torrentFree(tr_torrent* tor);
+void tr_torrentFreeInSessionThread(tr_torrent* tor);
 
 void tr_ctorInitTorrentPriorities(tr_ctor const* ctor, tr_torrent* tor);
 
@@ -747,9 +747,6 @@ public:
     struct tr_incomplete_metadata* incompleteMetadata = nullptr;
 
     time_t peer_id_creation_time_ = 0;
-
-    time_t dhtAnnounceAt = 0;
-    time_t dhtAnnounce6At = 0;
 
     time_t lpdAnnounceAt = 0;
 

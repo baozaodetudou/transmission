@@ -569,7 +569,7 @@ struct tr_peerMgr
         , refill_upkeep_timer_{ session->timerMaker().create([this]() { refillUpkeep(); }) }
     {
         bandwidth_timer_->startRepeating(BandwidthPeriod);
-        rechoke_timer_->startSingleShot(RechokePeriod);
+        rechoke_timer_->startRepeating(RechokePeriod);
         refill_upkeep_timer_->startRepeating(RefillUpkeepPeriod);
     }
 
@@ -591,7 +591,7 @@ struct tr_peerMgr
 
     void rechokeSoon() noexcept
     {
-        rechoke_timer_->startSingleShot(100ms);
+        rechoke_timer_->setInterval(100ms);
     }
 
     void bandwidthPulse();
@@ -607,7 +607,7 @@ private:
     void rechokePulseMarshall()
     {
         rechokePulse();
-        rechoke_timer_->startSingleShot(RechokePeriod);
+        rechoke_timer_->setInterval(RechokePeriod);
     }
 
     std::unique_ptr<libtransmission::Timer> const bandwidth_timer_;
@@ -1142,8 +1142,7 @@ static bool on_handshake_done(tr_handshake_result const& result)
     bool success = false;
     auto* manager = static_cast<tr_peerMgr*>(result.userData);
 
-    auto const hash = result.io->torrentHash();
-    tr_swarm* const s = hash ? getExistingSwarm(manager, *hash) : nullptr;
+    tr_swarm* const s = getExistingSwarm(manager, result.io->torrentHash());
 
     auto const [addr, port] = result.io->socketAddress();
 

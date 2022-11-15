@@ -55,7 +55,7 @@ public:
 
     TR_DISABLE_COPY_MOVE(Impl)
 
-    Glib::RefPtr<Gtk::TreeSelection> get_selection() const;
+    [[nodiscard]] Glib::RefPtr<Gtk::TreeSelection> get_selection() const;
 
     void refresh();
 
@@ -65,8 +65,8 @@ private:
     void init_view(Gtk::TreeView* view, Glib::RefPtr<Gtk::TreeModel> const& model);
 
     Glib::RefPtr<Gio::MenuModel> createOptionsMenu();
-    Glib::RefPtr<Gio::MenuModel> createSpeedMenu(Glib::RefPtr<Gio::SimpleActionGroup> actions, tr_direction dir);
-    Glib::RefPtr<Gio::MenuModel> createRatioMenu(Glib::RefPtr<Gio::SimpleActionGroup> actions);
+    Glib::RefPtr<Gio::MenuModel> createSpeedMenu(Glib::RefPtr<Gio::SimpleActionGroup> const& actions, tr_direction dir);
+    Glib::RefPtr<Gio::MenuModel> createRatioMenu(Glib::RefPtr<Gio::SimpleActionGroup> const& actions);
 
     Glib::RefPtr<Gio::MenuModel> createStatsMenu();
 
@@ -118,7 +118,7 @@ private:
 ****
 ***/
 
-void MainWindow::Impl::on_popup_menu([[maybe_unused]] double view_x, [[maybe_unused]] double view_y)
+void MainWindow::Impl::on_popup_menu([[maybe_unused]] double event_x, [[maybe_unused]] double event_y)
 {
     if (popup_menu_ == nullptr)
     {
@@ -136,6 +136,9 @@ void MainWindow::Impl::on_popup_menu([[maybe_unused]] double view_x, [[maybe_unu
     }
 
 #if GTKMM_CHECK_VERSION(4, 0, 0)
+    int view_x = 0;
+    int view_y = 0;
+    view_->convert_bin_window_to_widget_coords(static_cast<int>(event_x), static_cast<int>(event_y), view_x, view_y);
     double window_x = 0;
     double window_y = 0;
     view_->translate_coordinates(window_, view_x, view_y, window_x, window_y);
@@ -292,9 +295,11 @@ void MainWindow::Impl::onSpeedSet(tr_direction dir, int KBps)
     core_->set_pref(dir == TR_UP ? TR_KEY_speed_limit_up_enabled : TR_KEY_speed_limit_down_enabled, true);
 }
 
-Glib::RefPtr<Gio::MenuModel> MainWindow::Impl::createSpeedMenu(Glib::RefPtr<Gio::SimpleActionGroup> actions, tr_direction dir)
+Glib::RefPtr<Gio::MenuModel> MainWindow::Impl::createSpeedMenu(
+    Glib::RefPtr<Gio::SimpleActionGroup> const& actions,
+    tr_direction dir)
 {
-    auto& info = speed_menu_info_[dir];
+    auto& info = speed_menu_info_.at(dir);
 
     auto m = Gio::Menu::create();
 
@@ -353,9 +358,9 @@ void MainWindow::Impl::onRatioSet(double ratio)
     core_->set_pref(TR_KEY_ratio_limit_enabled, true);
 }
 
-Glib::RefPtr<Gio::MenuModel> MainWindow::Impl::createRatioMenu(Glib::RefPtr<Gio::SimpleActionGroup> actions)
+Glib::RefPtr<Gio::MenuModel> MainWindow::Impl::createRatioMenu(Glib::RefPtr<Gio::SimpleActionGroup> const& actions)
 {
-    static double const stockRatios[] = { 0.25, 0.5, 0.75, 1, 1.5, 2, 3 };
+    static auto const stockRatios = std::array<double, 7>({ 0.25, 0.5, 0.75, 1, 1.5, 2, 3 });
 
     auto& info = ratio_menu_info_;
 
@@ -459,16 +464,18 @@ void MainWindow::Impl::onOptionsClicked()
 
 Glib::RefPtr<Gio::MenuModel> MainWindow::Impl::createStatsMenu()
 {
-    static struct
+    struct StatsModeInfo
     {
         char const* val;
         char const* i18n;
-    } const stats_modes[] = {
+    };
+
+    static auto const stats_modes = std::array<StatsModeInfo, 4>({ {
         { "total-ratio", N_("Total Ratio") },
         { "session-ratio", N_("Session Ratio") },
         { "total-transfer", N_("Total Transfer") },
         { "session-transfer", N_("Session Transfer") },
-    };
+    } });
 
     auto top = Gio::Menu::create();
     auto actions = Gio::SimpleActionGroup::create();

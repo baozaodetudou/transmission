@@ -28,11 +28,6 @@ typedef NS_ENUM(NSInteger, TrackerSegmentTag) {
 
 @property(nonatomic) IBOutlet NSSegmentedControl* fTrackerAddRemoveControl;
 
-- (void)setupInfo;
-
-- (void)addTrackers;
-- (void)removeTrackers;
-
 @end
 
 @implementation InfoTrackersViewController
@@ -415,8 +410,8 @@ typedef NS_ENUM(NSInteger, TrackerSegmentTag) {
         if (removeTrackerCount > 1)
         {
             alert.messageText = [NSString
-                stringWithFormat:NSLocalizedString(@"Are you sure you want to remove %lu trackers?", "Remove trackers alert -> title"),
-                                 removeTrackerCount];
+                localizedStringWithFormat:NSLocalizedString(@"Are you sure you want to remove %lu trackers?", "Remove trackers alert -> title"),
+                                          removeTrackerCount];
             alert.informativeText = NSLocalizedString(
                 @"Once removed, Transmission will no longer attempt to contact them."
                  " This cannot be undone.",

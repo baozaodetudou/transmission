@@ -54,12 +54,6 @@ typedef NS_ENUM(NSUInteger, TrackerSegmentTag) {
 
 @property(nonatomic, readonly) NSUserDefaults* fDefaults;
 
-+ (NSURL*)chooseFile;
-
-- (void)updateLocationField;
-- (void)createReal;
-- (void)checkProgress;
-
 @end
 
 NSMutableSet* creatorWindowControllerSet = nil;
@@ -188,7 +182,7 @@ NSMutableSet* creatorWindowControllerSet = nil;
     {
         NSUInteger const count = self.fBuilder->fileCount();
         NSString* const fileString = count != 1 ?
-            [NSString stringWithFormat:NSLocalizedString(@"%lu files", "Create torrent -> info"), count] :
+            [NSString localizedStringWithFormat:NSLocalizedString(@"%lu files", "Create torrent -> info"), count] :
             NSLocalizedString(@"1 file", "Create torrent -> info");
         status_string = [NSString stringWithFormat:@"%@, %@", fileString, status_string];
     }
@@ -366,7 +360,7 @@ NSMutableSet* creatorWindowControllerSet = nil;
 
 - (IBAction)incrementOrDecrementPieceSize:(id)sender
 {
-    auto const piece_size = static_cast<uint32_t>(pow(2.0, [sender intValue]));
+    uint32_t const piece_size = 1U << [(NSStepper*)sender intValue];
 
     if (self.fBuilder->setPieceSize(piece_size))
     {

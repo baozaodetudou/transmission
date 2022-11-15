@@ -36,10 +36,7 @@ static auto constexpr RetryDuration = 100ms;
 static auto constexpr ProcessEventsTimeout = 300ms;
 static_assert(ProcessEventsTimeout > GenericRescanInterval);
 
-namespace libtransmission
-{
-
-namespace test
+namespace libtransmission::test
 {
 
 enum class WatchMode
@@ -181,7 +178,7 @@ TEST_P(WatchDirTest, watch)
     auto names = std::vector<std::string>{};
     auto callback = [&names](std::string_view /*dirname*/, std::string_view basename)
     {
-        names.emplace_back(std::string{ basename });
+        names.emplace_back(basename);
         return Watchdir::Action::Done;
     };
     auto watchdir = createWatchDir(dirname, callback);
@@ -229,7 +226,7 @@ TEST_P(WatchDirTest, retry)
     auto names = std::vector<std::string>{};
     auto callback = [&names](std::string_view /*dirname*/, std::string_view basename)
     {
-        names.emplace_back(std::string{ basename });
+        names.emplace_back(basename);
         return Watchdir::Action::Retry;
     };
     auto watchdir = createWatchDir(path, callback);
@@ -259,6 +256,4 @@ INSTANTIATE_TEST_SUITE_P( //
         WatchMode::NATIVE,
         WatchMode::GENERIC));
 
-} // namespace test
-
-} // namespace libtransmission
+} // namespace libtransmission::test

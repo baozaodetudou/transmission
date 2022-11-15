@@ -102,10 +102,6 @@ static NSString* const kWebUIURLFormat = @"http://localhost:%ld/";
 @property(nonatomic) IBOutlet NSSegmentedControl* fRPCAddRemoveControl;
 @property(nonatomic, copy) NSString* fRPCPassword;
 
-- (void)setPrefView:(id)sender;
-
-- (void)setKeychainPassword:(char const*)password forService:(char const*)service username:(char const*)username;
-
 @end
 
 @implementation PrefsController
@@ -499,7 +495,7 @@ static NSString* const kWebUIURLFormat = @"http://localhost:%ld/";
     case PORT_STATUS_CHECKING:
         break;
     default:
-        NSAssert1(NO, @"Port checker returned invalid status: %d", self.fPortChecker.status);
+        NSAssert(NO, @"Port checker returned invalid status: %d", self.fPortChecker.status);
         break;
     }
     self.fPortChecker = nil;
@@ -611,8 +607,8 @@ static NSString* const kWebUIURLFormat = @"http://localhost:%ld/";
     if (exists)
     {
         self.fBlocklistMessageField.stringValue = [NSString
-            stringWithFormat:NSLocalizedString(@"%lu IP address rules in list", "Prefs -> blocklist -> message"),
-                             tr_blocklistGetRuleCount(self.fHandle)];
+            localizedStringWithFormat:NSLocalizedString(@"%lu IP address rules in list", "Prefs -> blocklist -> message"),
+                                      tr_blocklistGetRuleCount(self.fHandle)];
     }
     else
     {

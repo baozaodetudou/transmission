@@ -130,6 +130,18 @@ extern char const* const speed_M_str;
 extern char const* const speed_G_str;
 extern char const* const speed_T_str;
 
+/***
+****
+***/
+
+void gtr_message(std::string const& message);
+void gtr_warning(std::string const& message);
+void gtr_error(std::string const& message);
+
+/***
+****
+***/
+
 enum class GtrUnicode
 {
     Up,
@@ -141,14 +153,14 @@ enum class GtrUnicode
 Glib::ustring gtr_get_unicode_string(GtrUnicode);
 
 /* return a human-readable string for the size given in bytes. */
-Glib::ustring tr_strlsize(guint64 size);
+Glib::ustring tr_strlsize(guint64 size_in_bytes);
 
 /* return a human-readable string for the given ratio. */
 Glib::ustring tr_strlratio(double ratio);
 
-std::string tr_format_time_relative(time_t src, time_t tgt);
-std::string tr_format_time_left(time_t seconds);
-std::string tr_format_time(time_t seconds);
+std::string tr_format_time_relative(time_t timestamp, time_t origin);
+std::string tr_format_time_left(time_t timestamp);
+std::string tr_format_time(time_t timestamp);
 
 /***
 ****
@@ -165,7 +177,9 @@ Glib::ustring gtr_get_help_uri();
 ***/
 
 /* backwards-compatible wrapper around gtk_widget_set_visible() */
-void gtr_widget_set_visible(Gtk::Widget&, bool);
+void gtr_widget_set_visible(Gtk::Widget& widget, bool is_visible);
+
+Gtk::Window& gtr_widget_get_window(Gtk::Widget& widget);
 
 void gtr_window_set_skip_taskbar_hint(Gtk::Window& window, bool value);
 void gtr_window_set_urgency_hint(Gtk::Window& window, bool value);
@@ -197,13 +211,13 @@ void gtr_add_torrent_error_dialog(Gtk::Widget& window_or_child, tr_torrent* dupl
    if the row they right-click on isn't selected, select it. */
 bool on_tree_view_button_pressed(
     Gtk::TreeView& view,
-    double view_x,
-    double view_y,
+    double event_x,
+    double event_y,
     bool context_menu_requested,
     std::function<void(double, double)> const& callback = {});
 
 /* if the click didn't specify a row, clear the selection */
-bool on_tree_view_button_released(Gtk::TreeView& view, double view_x, double view_y);
+bool on_tree_view_button_released(Gtk::TreeView& view, double event_x, double event_y);
 
 using TrGdkModifierType = IF_GTKMM4(Gdk::ModifierType, guint);
 

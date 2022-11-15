@@ -27,9 +27,9 @@ using UInt32VariantType = Glib::Variant<guint32>;
 namespace
 {
 
-auto const NotificationsDbusName = Glib::ustring("org.freedesktop.Notifications"s);
-auto const NotificationsDbusCoreObject = Glib::ustring("/org/freedesktop/Notifications"s);
-auto const NotificationsDbusCoreInterface = Glib::ustring("org.freedesktop.Notifications"s);
+auto const NotificationsDbusName = "org.freedesktop.Notifications"sv; // TODO(C++20): Use ""s
+auto const NotificationsDbusCoreObject = "/org/freedesktop/Notifications"sv; // TODO(C++20): Use ""s
+auto const NotificationsDbusCoreInterface = "org.freedesktop.Notifications"sv; // TODO(C++20): Use ""s
 
 struct TrNotification
 {
@@ -136,14 +136,11 @@ void dbus_proxy_ready_callback(Glib::RefPtr<Gio::AsyncResult>& res)
     }
     catch (Glib::Error const& e)
     {
-        g_warning(
-            "%s",
-            fmt::format(
-                _("Couldn't create proxy for '{bus}': {error} ({error_code})"),
-                fmt::arg("bus", NotificationsDbusName),
-                fmt::arg("error", TR_GLIB_EXCEPTION_WHAT(e)),
-                fmt::arg("error_code", e.code()))
-                .c_str());
+        gtr_warning(fmt::format(
+            _("Couldn't create proxy for '{bus}': {error} ({error_code})"),
+            fmt::arg("bus", NotificationsDbusName),
+            fmt::arg("error", TR_GLIB_EXCEPTION_WHAT(e)),
+            fmt::arg("error_code", e.code())));
         return;
     }
 
@@ -157,9 +154,9 @@ void gtr_notify_init()
 {
     Gio::DBus::Proxy::create_for_bus(
         TR_GIO_DBUS_BUS_TYPE(SESSION),
-        NotificationsDbusName,
-        NotificationsDbusCoreObject,
-        NotificationsDbusCoreInterface,
+        std::string(NotificationsDbusName),
+        std::string(NotificationsDbusCoreObject),
+        std::string(NotificationsDbusCoreInterface),
         &dbus_proxy_ready_callback,
         {},
         TR_GIO_DBUS_PROXY_FLAGS(DO_NOT_LOAD_PROPERTIES));
@@ -242,7 +239,7 @@ void gtr_notify_torrent_completed(Glib::RefPtr<Session> const& core, tr_torrent_
         [n](auto& res) { notify_callback(res, n); },
         make_variant_tuple(
             Glib::ustring("Transmission"),
-            0u,
+            0U,
             Glib::ustring("transmission"),
             Glib::ustring(_("Torrent Complete")),
             Glib::ustring(tr_torrentName(tor)),
@@ -276,7 +273,7 @@ void gtr_notify_torrent_added(Glib::RefPtr<Session> const& core, tr_torrent_id_t
         [n](auto& res) { notify_callback(res, n); },
         make_variant_tuple(
             Glib::ustring("Transmission"),
-            0u,
+            0U,
             Glib::ustring("transmission"),
             Glib::ustring(_("Torrent Added")),
             Glib::ustring(tr_torrentName(tor)),

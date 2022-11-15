@@ -47,29 +47,6 @@ static int const kETAIdleDisplaySec = 2 * 60;
 
 @property(nonatomic) BOOL fTimeMachineExcludeInitialized;
 
-- (instancetype)initWithPath:(NSString*)path
-                        hash:(NSString*)hashString
-               torrentStruct:(tr_torrent*)torrentStruct
-               magnetAddress:(NSString*)magnetAddress
-                         lib:(tr_session*)lib
-                  groupValue:(NSNumber*)groupValue
-     removeWhenFinishSeeding:(NSNumber*)removeWhenFinishSeeding
-              downloadFolder:(NSString*)downloadFolder
-      legacyIncompleteFolder:(NSString*)incompleteFolder;
-
-- (void)createFileList;
-- (void)insertPathForComponents:(NSArray*)components
-             withComponentIndex:(NSUInteger)componentIndex
-                      forParent:(FileListNode*)parent
-                       fileSize:(uint64_t)size
-                          index:(NSInteger)index
-                       flatList:(NSMutableArray<FileListNode*>*)flatFileList;
-- (void)sortFileList:(NSMutableArray<FileListNode*>*)fileNodes;
-
-- (void)startQueue;
-- (void)ratioLimitHit;
-- (void)idleLimitHit;
-- (void)metadataRetrieved;
 - (void)renameFinished:(BOOL)success
                  nodes:(NSArray<FileListNode*>*)nodes
      completionHandler:(void (^)(BOOL))completionHandler
@@ -78,8 +55,6 @@ static int const kETAIdleDisplaySec = 2 * 60;
 
 @property(nonatomic, readonly) BOOL shouldShowEta;
 @property(nonatomic, readonly) NSString* etaString;
-
-- (void)setTimeMachineExclude:(BOOL)exclude;
 
 @end
 
@@ -264,12 +239,12 @@ bool trashDataFile(char const* filename, void* /*user_data*/, tr_error** error)
 - (void)update
 {
     //get previous stalled value before update
-    BOOL const wasStalled = self.fStat != NULL && self.stalled;
+    BOOL const wasTransmitting = self.fStat != NULL && self.transmitting;
 
     self.fStat = tr_torrentStat(self.fHandle);
 
-    //make sure the "active" filter is updated when stalled-ness changes
-    if (wasStalled != self.stalled)
+    //make sure the "active" filter is updated when transmitting changes
+    if (wasTransmitting != self.transmitting)
     {
         //posting asynchronously with coalescing to prevent stack overflow on lots of torrents changing state at the same time
         [NSNotificationQueue.defaultQueue enqueueNotification:[NSNotification notificationWithName:@"UpdateQueue" object:self]
@@ -869,6 +844,12 @@ bool trashDataFile(char const* filename, void* /*user_data*/, tr_error** error)
         self.fStat->activity != TR_STATUS_SEED_WAIT;
 }
 
+- (BOOL)isTransmitting
+{
+    return self.fStat->peersGettingFromUs > 0 || self.fStat->peersSendingToUs > 0 || self.fStat->webseedsSendingToUs > 0 ||
+        self.fStat->activity == TR_STATUS_CHECK;
+}
+
 - (BOOL)isSeeding
 {
     return self.fStat->activity == TR_STATUS_SEED;
@@ -1126,11 +1107,11 @@ bool trashDataFile(char const* filename, void* /*user_data*/, tr_error** error)
             break;
 
         case TR_STATUS_DOWNLOAD:
-            if (self.totalPeersConnected != 1)
+            if (NSUInteger const totalPeersCount = self.totalPeersConnected; totalPeersCount != 1)
             {
-                string = [NSString stringWithFormat:NSLocalizedString(@"Downloading from %lu of %lu peers", "Torrent -> status string"),
-                                                    self.peersSendingToUs,
-                                                    self.totalPeersConnected];
+                string = [NSString localizedStringWithFormat:NSLocalizedString(@"Downloading from %lu of %lu peers", "Torrent -> status string"),
+                                                             self.peersSendingToUs,
+                                                             totalPeersCount];
             }
             else
             {
@@ -1141,13 +1122,14 @@ bool trashDataFile(char const* filename, void* /*user_data*/, tr_error** error)
             if (NSUInteger const webSeedCount = self.fStat->webseedsSendingToUs; webSeedCount > 0)
             {
                 NSString* webSeedString;
-                if (webSeedCount == 1)
+                if (webSeedCount != 1)
                 {
-                    webSeedString = NSLocalizedString(@"web seed", "Torrent -> status string");
+                    webSeedString = [NSString
+                        localizedStringWithFormat:NSLocalizedString(@"%lu web seeds", "Torrent -> status string"), webSeedCount];
                 }
                 else
                 {
-                    webSeedString = [NSString stringWithFormat:NSLocalizedString(@"%lu web seeds", "Torrent -> status string"), webSeedCount];
+                    webSeedString = NSLocalizedString(@"web seed", "Torrent -> status string");
                 }
 
                 string = [string stringByAppendingFormat:@" + %@", webSeedString];
@@ -1156,14 +1138,18 @@ bool trashDataFile(char const* filename, void* /*user_data*/, tr_error** error)
             break;
 
         case TR_STATUS_SEED:
-            if (self.totalPeersConnected != 1)
+            if (NSUInteger const totalPeersCount = self.totalPeersConnected; totalPeersCount != 1)
             {
-                string = [NSString stringWithFormat:NSLocalizedString(@"Seeding to %1$lu of %2$lu peers", "Torrent -> status string"),
-                                                    self.peersGettingFromUs,
-                                                    self.totalPeersConnected];
+                string = [NSString localizedStringWithFormat:NSLocalizedString(@"Seeding to %1$lu of %2$lu peers", "Torrent -> status string"),
+                                                             self.peersGettingFromUs,
+                                                             totalPeersCount];
             }
             else
             {
+                // TODO: "%lu of 1" vs "%u of 1" disparity
+                // - either change "Downloading from %lu of 1 peer" to "Downloading from %u of 1 peer"
+                // - or change "Seeding to %u of 1 peer" to "Seeding to %lu of 1 peer"
+                // then update Transifex accordingly
                 string = [NSString stringWithFormat:NSLocalizedString(@"Seeding to %u of 1 peer", "Torrent -> status string"),
                                                     (unsigned int)self.peersGettingFromUs];
             }
@@ -2068,20 +2054,16 @@ bool trashDataFile(char const* filename, void* /*user_data*/, tr_error** error)
 
 - (NSString*)etaString
 {
-    NSInteger eta;
-    BOOL fromIdle;
-    //don't check for both, since if there's a regular ETA, the torrent isn't idle so it's meaningless
-    if (self.fStat->eta != TR_ETA_NOT_AVAIL && self.fStat->eta != TR_ETA_UNKNOWN)
-    {
-        eta = self.fStat->eta;
-        fromIdle = NO;
-    }
-    else if (self.fStat->etaIdle != TR_ETA_NOT_AVAIL && self.fStat->etaIdle < kETAIdleDisplaySec)
+    time_t eta = self.fStat->eta;
+    // if there's a regular ETA, the torrent isn't idle
+    BOOL fromIdle = NO;
+    if (eta == TR_ETA_NOT_AVAIL || eta == TR_ETA_UNKNOWN)
     {
         eta = self.fStat->etaIdle;
         fromIdle = YES;
     }
-    else
+    // Foundation undocumented behavior: values above INT_MAX (68 years) are interpreted as negative values by `stringFromTimeInterval` (#3451)
+    if (eta < 0 || eta > INT_MAX || (fromIdle && eta >= kETAIdleDisplaySec))
     {
         return NSLocalizedString(@"remaining time unknown", "Torrent -> eta string");
     }
@@ -2095,6 +2077,8 @@ bool trashDataFile(char const* filename, void* /*user_data*/, tr_error** error)
         formatter.collapsesLargestUnit = YES;
         formatter.includesTimeRemainingPhrase = YES;
     });
+    // the duration of months being variable, setting the reference date to now (instead of 00:00:00 UTC on 1 January 2001)
+    formatter.referenceDate = NSDate.date;
     NSString* idleString = [formatter stringFromTimeInterval:eta];
 
     if (fromIdle)

@@ -23,11 +23,6 @@
 struct tr_announcer;
 struct tr_torrent_announcer;
 
-namespace libtransmission
-{
-class Dns;
-} // namespace libtransmission
-
 /**
  * ***  Tracker Publish / Subscribe
  * **/

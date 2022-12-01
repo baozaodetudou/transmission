@@ -52,16 +52,16 @@ private:
         }
     };
 
-    void callCallback(tr_torrent* tor, bool aborted)
+    void callCallback(tr_torrent* tor, bool aborted) const
     {
-        for (auto& callback : callbacks_)
+        for (auto const& callback : callbacks_)
         {
             callback(tor, aborted);
         }
     }
 
     void verifyThreadFunc();
-    [[nodiscard]] static bool verifyTorrent(tr_torrent* tor, std::atomic<bool>& stop_flag);
+    [[nodiscard]] static bool verifyTorrent(tr_torrent* tor, std::atomic<bool> const& stop_flag);
 
     std::list<callback_func> callbacks_;
     std::mutex verify_mutex_;

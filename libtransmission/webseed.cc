@@ -154,7 +154,7 @@ private:
 void task_request_next_chunk(tr_webseed_task* task);
 void onBufferGotData(evbuffer* /*buf*/, evbuffer_cb_info const* info, void* vtask);
 
-class tr_webseed : public tr_peer
+class tr_webseed final : public tr_peer
 {
 public:
     tr_webseed(struct tr_torrent* tor, std::string_view url, tr_peer_callback callback_in, void* callback_data_in)
@@ -163,10 +163,12 @@ public:
         , base_url{ url }
         , callback{ callback_in }
         , callback_data{ callback_data_in }
+        , idle_timer_{ session->timerMaker().create([this]() { on_idle(this); }) }
+        , have_{ tor->pieceCount() }
         , bandwidth_{ &tor->bandwidth_ }
-        , idle_timer{ session->timerMaker().create([this]() { on_idle(this); }) }
     {
-        idle_timer->startRepeating(IdleTimerInterval);
+        have_.setHasAll();
+        idle_timer_->startRepeating(IdleTimerInterval);
     }
 
     tr_webseed(tr_webseed&&) = delete;
@@ -238,9 +240,9 @@ public:
         return base_url;
     }
 
-    [[nodiscard]] bool hasPiece(tr_piece_index_t /*piece*/) const noexcept override
+    [[nodiscard]] tr_bitfield const& has() const noexcept override
     {
-        return true;
+        return have_;
     }
 
     void gotPieceData(uint32_t n_bytes)
@@ -286,7 +288,7 @@ public:
             return {};
         }
 
-        if (auto* const tor = getTorrent(); tor == nullptr || !tor->isRunning || tor->isDone())
+        if (auto const* const tor = getTorrent(); tor == nullptr || !tor->isRunning || tor->isDone())
         {
             return {};
         }
@@ -315,9 +317,13 @@ public:
     std::set<tr_webseed_task*> tasks;
 
 private:
-    tr_bandwidth bandwidth_;
-    std::unique_ptr<libtransmission::Timer> idle_timer;
     static auto constexpr IdleTimerInterval = 2s;
+
+    std::unique_ptr<libtransmission::Timer> const idle_timer_;
+
+    tr_bitfield have_;
+
+    tr_bandwidth bandwidth_;
 };
 
 /***
@@ -346,7 +352,7 @@ public:
 
     void write_block_func()
     {
-        if (auto* const tor = tr_torrentFindFromId(session_, tor_id_); tor != nullptr)
+        if (auto const* const tor = tr_torrentFindFromId(session_, tor_id_); tor != nullptr)
         {
             session_->cache->writeBlock(tor_id_, block_, data_);
             webseed_->publish(tr_peer_event::GotBlock(tor->blockInfo(), block_));
@@ -504,7 +510,7 @@ void makeUrl(tr_webseed const* const webseed, std::string_view name, OutputIt ou
 void task_request_next_chunk(tr_webseed_task* task)
 {
     auto* const webseed = task->webseed;
-    auto* const tor = webseed->getTorrent();
+    auto const* const tor = webseed->getTorrent();
     if (tor == nullptr)
     {
         return;

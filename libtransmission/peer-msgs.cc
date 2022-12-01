@@ -423,24 +423,9 @@ public:
         return addr.readable(port);
     }
 
-    [[nodiscard]] bool isSeed() const noexcept override
+    [[nodiscard]] tr_bitfield const& has() const noexcept override
     {
-        return have_.hasAll();
-    }
-
-    [[nodiscard]] bool hasPiece(tr_piece_index_t piece) const noexcept override
-    {
-        return have_.test(piece);
-    }
-
-    [[nodiscard]] float percentDone() const noexcept override
-    {
-        if (!percent_done_)
-        {
-            percent_done_ = calculatePercentDone();
-        }
-
-        return *percent_done_;
+        return have_;
     }
 
     void onTorrentGotMetainfo() noexcept override
@@ -450,7 +435,6 @@ public:
 
     void invalidatePercentDone()
     {
-        percent_done_.reset();
         updateInterest();
     }
 
@@ -618,24 +602,6 @@ private:
         pokeBatchPeriod(ImmediatePriorityIntervalSecs);
     }
 
-    [[nodiscard]] float calculatePercentDone() const noexcept
-    {
-        if (have_.hasAll())
-        {
-            return 1.0F;
-        }
-
-        if (have_.hasNone())
-        {
-            return 0.0F;
-        }
-
-        auto const true_count = have_.count();
-        auto const percent_done = torrent->hasMetainfo() ? true_count / static_cast<float>(torrent->pieceCount()) :
-                                                           true_count / static_cast<float>(std::size(have_) + 1);
-        return std::clamp(percent_done, 0.0F, 1.0F);
-    }
-
     [[nodiscard]] bool calculate_active(tr_direction direction) const
     {
         if (direction == TR_CLIENT_TO_PEER)
@@ -747,8 +713,6 @@ private:
 
     tr_peer_callback const callback_;
     void* const callback_data_;
-
-    mutable std::optional<float> percent_done_;
 
     // seconds between periodic sendPex() calls
     static auto constexpr SendPexInterval = 90s;
@@ -897,7 +861,7 @@ static void cancelAllRequestsToClient(tr_peerMsgsImpl* msgs)
 {
     if (auto const must_send_rej = msgs->io->supportsFEXT(); must_send_rej)
     {
-        for (auto& req : msgs->peer_requested_)
+        for (auto const& req : msgs->peer_requested_)
         {
             protocolSendReject(msgs, &req);
         }
@@ -960,8 +924,8 @@ static void sendLtepHandshake(tr_peerMsgsImpl* msgs)
     // It also adds "metadata_size" to the handshake message (not the
     // "m" dictionary) specifying an integer value of the number of
     // bytes of the metadata.
-    auto const info_dict_size = msgs->torrent->infoDictSize();
-    if (allow_metadata_xfer && msgs->torrent->hasMetainfo() && info_dict_size > 0)
+    if (auto const info_dict_size = msgs->torrent->infoDictSize();
+        allow_metadata_xfer && msgs->torrent->hasMetainfo() && info_dict_size > 0)
     {
         tr_variantDictAddInt(&val, TR_KEY_metadata_size, info_dict_size);
     }
@@ -1197,7 +1161,7 @@ static void parseUtMetadata(tr_peerMsgsImpl* msgs, uint32_t msglen)
 
 static void parseUtPex(tr_peerMsgsImpl* msgs, uint32_t msglen)
 {
-    tr_torrent* tor = msgs->torrent;
+    auto* const tor = msgs->torrent;
     if (!tor->allowsPex())
     {
         return;
@@ -1802,16 +1766,18 @@ static int clientGotBlock(
 {
     TR_ASSERT(msgs != nullptr);
 
-    tr_torrent* const tor = msgs->torrent;
+    tr_torrent const* const tor = msgs->torrent;
+    auto const n_expected = msgs->torrent->blockSize(block);
 
-    if (!block_data || std::size(*block_data) != msgs->torrent->blockSize(block))
+    if (!block_data)
     {
-        logdbg(
-            msgs,
-            fmt::format(
-                FMT_STRING("wrong block size -- expected {:d}, got {:d}"),
-                msgs->torrent->blockSize(block),
-                block_data ? std::size(*block_data) : 0U));
+        logdbg(msgs, fmt::format("wrong block size: expected {:d}, got {:d}", n_expected, 0));
+        return EMSGSIZE;
+    }
+
+    if (std::size(*block_data) != msgs->torrent->blockSize(block))
+    {
+        logdbg(msgs, fmt::format("wrong block size: expected {:d}, got {:d}", n_expected, std::size(*block_data)));
         block_data->clear();
         return EMSGSIZE;
     }
@@ -2013,8 +1979,7 @@ static size_t fillOutputBuffer(tr_peerMsgsImpl* msgs, time_t now)
     ***  Metadata Pieces
     **/
 
-    auto piece = int{};
-    if (msgs->io->getWriteBufferSpace(now) >= METADATA_PIECE_SIZE && popNextMetadataRequest(msgs, &piece))
+    if (auto piece = int{}; msgs->io->getWriteBufferSpace(now) >= METADATA_PIECE_SIZE && popNextMetadataRequest(msgs, &piece))
     {
         auto ok = bool{ false };
 
@@ -2173,7 +2138,7 @@ static void peerPulse(void* vmsgs)
     }
 }
 
-static void gotError(tr_peerIo* /*io*/, short what, void* vmsgs)
+static void gotError(tr_peerIo* io, short what, void* vmsgs)
 {
     auto* msgs = static_cast<tr_peerMsgsImpl*>(vmsgs);
 
@@ -2182,11 +2147,19 @@ static void gotError(tr_peerIo* /*io*/, short what, void* vmsgs)
         logdbg(msgs, fmt::format(FMT_STRING("libevent got a timeout, what={:d}"), what));
     }
 
-    if ((what & (BEV_EVENT_EOF | BEV_EVENT_ERROR)) != 0)
+    if ((what & BEV_EVENT_EOF) != 0)
     {
-        logdbg(
-            msgs,
-            fmt::format(FMT_STRING("libevent got an error! what={:d}, errno={:d} ({:s})"), what, errno, tr_strerror(errno)));
+        logdbg(msgs, fmt::format("peer closed connection. {:s}", io->addrStr()));
+    }
+    else if (what == BEV_EVENT_ERROR)
+    {
+        // exact BEV_EVENT_ERROR are high frequency errors from utp_on_error which were already logged appropriately
+        logtrace(msgs, fmt::format("libevent got an error! what={:d}, errno={:d} ({:s})", what, errno, tr_strerror(errno)));
+    }
+    else if ((what & BEV_EVENT_ERROR) != 0)
+    {
+        // read or write error
+        logdbg(msgs, fmt::format("libevent got an error! what={:d}, errno={:d} ({:s})", what, errno, tr_strerror(errno)));
     }
 
     msgs->publish(tr_peer_event::GotError(ENOTCONN));

@@ -347,9 +347,8 @@ struct tr_peer_socket tr_netOpenPeerUTPSocket(
     if (session->utp_context != nullptr && tr_address_is_valid_for_peers(addr, port))
     {
         auto const [ss, sslen] = addr->toSockaddr(port);
-        auto* const socket = utp_create_socket(session->utp_context);
 
-        if (socket != nullptr)
+        if (auto* const socket = utp_create_socket(session->utp_context); socket != nullptr)
         {
             if (utp_connect(socket, reinterpret_cast<sockaddr const*>(&ss), sslen) != -1)
             {
@@ -384,7 +383,7 @@ void tr_netClosePeerSocket(tr_session* session, tr_peer_socket socket)
 #endif
 
     default:
-        TR_ASSERT_MSG(false, fmt::format(FMT_STRING("unsupported peer socket type {:d}"), socket.type));
+        TR_ASSERT_MSG(false, fmt::format(FMT_STRING("unsupported peer socket type {:d}"), static_cast<int>(socket.type)));
     }
 }
 

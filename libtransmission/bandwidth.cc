@@ -144,10 +144,10 @@ void tr_bandwidth::allocateBandwidth(
     tr_priority_t const priority = std::max(parent_priority, this->priority_);
 
     /* set the available bandwidth */
-    if (this->band_[dir].is_limited_)
+    if (auto& bandwidth = band_[dir]; bandwidth.is_limited_)
     {
-        uint64_t const next_pulse_speed = this->band_[dir].desired_speed_bps_;
-        this->band_[dir].bytes_left_ = next_pulse_speed * period_msec / 1000U;
+        auto const next_pulse_speed = bandwidth.desired_speed_bps_;
+        bandwidth.bytes_left_ = next_pulse_speed * period_msec / 1000U;
     }
 
     /* add this bandwidth's peer, if any, to the peer pool */
@@ -211,7 +211,7 @@ void tr_bandwidth::allocate(tr_direction dir, unsigned int period_msec)
      * 2. accumulate an array of all the peerIos from b and its subtree. */
     this->allocateBandwidth(TR_PRI_LOW, dir, period_msec, refs);
 
-    for (auto& io : refs)
+    for (auto const& io : refs)
     {
         io->flushOutgoingProtocolMsgs();
 
@@ -242,7 +242,7 @@ void tr_bandwidth::allocate(tr_direction dir, unsigned int period_msec)
      * enable on-demand IO for peers with bandwidth left to burn.
      * This on-demand IO is enabled until (1) the peer runs out of bandwidth,
      * or (2) the next tr_bandwidth::allocate () call, when we start over again. */
-    for (auto& io : refs)
+    for (auto const& io : refs)
     {
         io->setEnabled(dir, io->hasBandwidthLeft(dir));
     }
@@ -252,7 +252,7 @@ void tr_bandwidth::allocate(tr_direction dir, unsigned int period_msec)
 ****
 ***/
 
-unsigned int tr_bandwidth::clamp(uint64_t now, tr_direction dir, unsigned int byte_count) const
+size_t tr_bandwidth::clamp(uint64_t now, tr_direction dir, size_t byte_count) const
 {
     TR_ASSERT(tr_isDirection(dir));
 
@@ -271,19 +271,19 @@ unsigned int tr_bandwidth::clamp(uint64_t now, tr_direction dir, unsigned int by
 
             auto const current = this->getRawSpeedBytesPerSecond(now, TR_DOWN);
             auto const desired = this->getDesiredSpeedBytesPerSecond(TR_DOWN);
-            auto const r = desired >= 1 ? double(current) / desired : 0;
+            auto const r = desired >= 1 ? static_cast<double>(current) / desired : 0.0;
 
             if (r > 1.0)
             {
-                byte_count = 0;
+                byte_count = 0; // none left
             }
             else if (r > 0.9)
             {
-                byte_count = static_cast<unsigned int>(byte_count * 0.8);
+                byte_count -= (byte_count / 5U); // cap at 80%
             }
             else if (r > 0.8)
             {
-                byte_count = static_cast<unsigned int>(byte_count * 0.9);
+                byte_count -= (byte_count / 10U); // cap at 90%
             }
         }
     }

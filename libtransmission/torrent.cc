@@ -462,14 +462,14 @@ static void tr_torrentClearError(tr_torrent* tor)
 
 static void onTrackerResponse(tr_torrent* tor, tr_tracker_event const* event, void* /*user_data*/)
 {
-    switch (event->messageType)
+    switch (event->type)
     {
-    case TR_TRACKER_PEERS:
+    case tr_tracker_event::Type::Peers:
         tr_logAddTraceTor(tor, fmt::format("Got {} peers from tracker", std::size(event->pex)));
         tr_peerMgrAddPex(tor, TR_PEER_FROM_TRACKER, std::data(event->pex), std::size(event->pex));
         break;
 
-    case TR_TRACKER_COUNTS:
+    case tr_tracker_event::Type::Counts:
         if (tor->isPrivate() && (event->leechers == 0))
         {
             tr_peerMgrSetSwarmIsAllSeeds(tor);
@@ -477,20 +477,20 @@ static void onTrackerResponse(tr_torrent* tor, tr_tracker_event const* event, vo
 
         break;
 
-    case TR_TRACKER_WARNING:
+    case tr_tracker_event::Type::Warning:
         tr_logAddWarnTor(tor, fmt::format(_("Tracker warning: '{warning}'"), fmt::arg("warning", event->text)));
         tor->error = TR_STAT_TRACKER_WARNING;
         tor->error_announce_url = event->announce_url;
         tor->error_string = event->text;
         break;
 
-    case TR_TRACKER_ERROR:
+    case tr_tracker_event::Type::Error:
         tor->error = TR_STAT_TRACKER_ERROR;
         tor->error_announce_url = event->announce_url;
         tor->error_string = event->text;
         break;
 
-    case TR_TRACKER_ERROR_CLEAR:
+    case tr_tracker_event::Type::ErrorClear:
         if (tor->error != TR_STAT_LOCAL_ERROR)
         {
             tr_torrentClearError(tor);
@@ -762,7 +762,7 @@ static void torrentInit(tr_torrent* tor, tr_ctor const* ctor)
         }
     }
 
-    tor->torrent_announcer = tr_announcerAddTorrent(tor, onTrackerResponse, nullptr);
+    tor->torrent_announcer = session->announcer_->addTorrent(tor, onTrackerResponse, nullptr);
 
     if (is_new_torrent)
     {
@@ -909,39 +909,6 @@ void tr_torrent::setVerifyState(tr_verify_state state)
     this->markChanged();
 }
 
-tr_torrent_activity tr_torrentGetActivity(tr_torrent const* tor)
-{
-    tr_torrent_activity ret = TR_STATUS_STOPPED;
-
-    bool const is_seed = tor->isDone();
-
-    if (tor->verifyState() == TR_VERIFY_NOW)
-    {
-        ret = TR_STATUS_CHECK;
-    }
-    else if (tor->verifyState() == TR_VERIFY_WAIT)
-    {
-        ret = TR_STATUS_CHECK_WAIT;
-    }
-    else if (tor->isRunning)
-    {
-        ret = is_seed ? TR_STATUS_SEED : TR_STATUS_DOWNLOAD;
-    }
-    else if (tor->isQueued())
-    {
-        if (is_seed && tor->session->queueEnabled(TR_UP))
-        {
-            ret = TR_STATUS_SEED_WAIT;
-        }
-        else if (!is_seed && tor->session->queueEnabled(TR_DOWN))
-        {
-            ret = TR_STATUS_DOWNLOAD_WAIT;
-        }
-    }
-
-    return ret;
-}
-
 static time_t torrentGetIdleSecs(tr_torrent const* tor, tr_torrent_activity activity)
 {
     return ((activity == TR_STATUS_DOWNLOAD || activity == TR_STATUS_SEED) && tor->startDate != 0) ?
@@ -971,7 +938,7 @@ tr_stat const* tr_torrentStat(tr_torrent* tor)
 
     tr_stat* const s = &tor->stats;
     s->id = tor->id();
-    s->activity = tr_torrentGetActivity(tor);
+    s->activity = tor->activity();
     s->error = tor->error;
     s->queuePosition = tor->queuePosition;
     s->idleSecs = torrentGetIdleSecs(tor, s->activity);
@@ -1001,7 +968,7 @@ tr_stat const* tr_torrentStat(tr_torrent* tor)
     s->sizeWhenDone = tor->completion.sizeWhenDone();
 
     auto const verify_progress = tor->verifyProgress();
-    s->recheckProgress = verify_progress ? *verify_progress : 0.0F;
+    s->recheckProgress = verify_progress.value_or(0.0);
     s->activityDate = tor->activityDate;
     s->addedDate = tor->addedDate;
     s->doneDate = tor->doneDate;
@@ -1263,7 +1230,7 @@ static void freeTorrent(tr_torrent* tor)
 
     tr_peerMgrRemoveTorrent(tor);
 
-    tr_announcerRemoveTorrent(session->announcer, tor);
+    session->announcer_->removeTorrent(tor);
 
     session->torrents().remove(tor, tr_time());
 
@@ -1311,7 +1278,7 @@ static void torrentStartImpl(tr_torrent* const tor)
     tor->finishedSeedingByIdle = false;
 
     tr_torrentResetTransferStats(tor);
-    tr_announcerTorrentStarted(tor);
+    tor->session->announcer_->startTorrent(tor);
     tor->lpdAnnounceAt = now;
     tr_peerMgrStartTorrent(tor);
 }
@@ -1325,7 +1292,7 @@ static bool torrentShouldQueue(tr_torrent const* const tor)
 
 static void torrentStart(tr_torrent* tor, torrent_start_opts opts)
 {
-    switch (tr_torrentGetActivity(tor))
+    switch (tor->activity())
     {
     case TR_STATUS_SEED:
     case TR_STATUS_DOWNLOAD:
@@ -1495,7 +1462,7 @@ static void stopTorrent(tr_torrent* const tor)
     tor->session->verifyRemove(tor);
 
     tr_peerMgrStopTorrent(tor);
-    tr_announcerTorrentStopped(tor);
+    tor->session->announcer_->stopTorrent(tor);
 
     tor->session->closeTorrentFiles(tor);
 
@@ -1626,7 +1593,7 @@ static std::string buildLabelsString(tr_torrent const* tor)
 
     for (auto it = std::begin(tor->labels), end = std::end(tor->labels); it != end;)
     {
-        buf << *it;
+        buf << tr_quark_get_string_view(*it);
 
         if (++it != end)
         {
@@ -1991,7 +1958,7 @@ bool tr_torrent::setTrackerList(std::string_view text)
     }
 
     /* tell the announcer to reload this torrent's tracker list */
-    tr_announcerResetTorrent(this->session->announcer, this);
+    this->session->announcer_->resetTorrent(this);
 
     return true;
 }
@@ -2331,7 +2298,7 @@ void tr_torrentSetQueuePosition(tr_torrent* tor, size_t queue_position)
     size_t current = 0;
     auto const old_pos = tor->queuePosition;
 
-    tor->queuePosition = -1;
+    tor->queuePosition = static_cast<size_t>(-1);
 
     for (auto* const walk : tor->session->torrents())
     {

@@ -18,13 +18,14 @@
 #include <netinet/in.h> /* sockaddr_in */
 #endif
 
+#include <event2/event.h>
 #include <event2/util.h>
 
 #include <fmt/format.h>
 
 #include "transmission.h"
 
-#include "crypto-utils.h" // for tr_rand_buffer()
+#include "crypto-utils.h" // for tr_rand_obj()
 #include "log.h"
 #include "net.h"
 #include "timer.h"
@@ -48,8 +49,7 @@ auto makeCookie()
 {
     static auto constexpr Pool = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"sv;
 
-    auto buf = std::array<char, 12>{};
-    tr_rand_buffer(std::data(buf), std::size(buf));
+    auto buf = tr_rand_obj<std::array<char, 12>>();
     for (auto& ch : buf)
     {
         ch = Pool[static_cast<unsigned char>(ch) % std::size(Pool)];
@@ -426,8 +426,7 @@ private:
 
         // If it doesn't look like a BEP14 message, discard it
         auto const msg = std::string_view{ std::data(foreign_msg), static_cast<size_t>(res) };
-        static auto constexpr SearchKey = "BT-SEARCH * HTTP/"sv;
-        if (msg.find(SearchKey) == std::string_view::npos)
+        if (static auto constexpr SearchKey = "BT-SEARCH * HTTP/"sv; msg.find(SearchKey) == std::string_view::npos)
         {
             return;
         }
@@ -521,7 +520,7 @@ private:
         }
 
         auto const next_announce_after = now + TorrentAnnounceIntervalSec;
-        for (auto& info_hash_string : info_hash_strings)
+        for (auto const& info_hash_string : info_hash_strings)
         {
             mediator_.setNextAnnounceTime(info_hash_string, next_announce_after);
         }
